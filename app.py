@@ -3,26 +3,72 @@ import streamlit as st
 import requests
 import os
 from dotenv import load_dotenv
-
-# -----------------------------
-# LOAD ENV VARIABLES
-# -----------------------------
 load_dotenv()
-API_KEY = os.getenv("TMDB_API_KEY")
 
 # -----------------------------
 # CONFIG
 # -----------------------------
 st.set_page_config(page_title="Movie Recommender", layout="wide")
 
-# Stop app if API key missing
+# Use Streamlit secrets (for deployment)
+try:
+    API_KEY = st.secrets["TMDB_API_KEY"]
+except:
+    API_KEY = os.getenv("TMDB_API_KEY")
+
 if not API_KEY:
-    st.error("TMDB API key not found. Please set TMDB_API_KEY in .env file.")
+    st.error("TMDB API key not found. Set it in Streamlit secrets or .env")
     st.stop()
 
+# -----------------------------
+# GOOGLE DRIVE FILE IDs
+# -----------------------------
+MOVIE_FILE_ID = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
+SIM_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
+
+MODEL_DIR = "model"
+MOVIE_PATH = f"{MODEL_DIR}/movie_list.pkl"
+SIM_PATH = f"{MODEL_DIR}/similarity.pkl"
 
 # -----------------------------
-# FETCH POSTER (CACHED)
+# DOWNLOAD FUNCTION
+# -----------------------------
+def download_file_from_drive(file_id, destination):
+    url = f"https://drive.google.com/uc?id={file_id}"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        st.error("Failed to download model files.")
+        st.stop()
+
+    with open(destination, "wb") as f:
+        f.write(response.content)
+
+# -----------------------------
+# LOAD DATA (WITH AUTO DOWNLOAD)
+# -----------------------------
+@st.cache_resource
+def load_data():
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+    if not os.path.exists(MOVIE_PATH):
+        st.info("Downloading movie list...")
+        download_file_from_drive(MOVIE_FILE_ID, MOVIE_PATH)
+
+    if not os.path.exists(SIM_PATH):
+        st.info("Downloading similarity matrix (first run only)...")
+        download_file_from_drive(SIM_FILE_ID, SIM_PATH)
+
+    movies = pickle.load(open(MOVIE_PATH, "rb"))
+    similarity = pickle.load(open(SIM_PATH, "rb"))
+
+    return movies, similarity
+
+
+movies, similarity = load_data()
+
+# -----------------------------
+# FETCH POSTER
 # -----------------------------
 @st.cache_data
 def fetch_poster(movie_id):
@@ -41,9 +87,8 @@ def fetch_poster(movie_id):
         else:
             return "https://via.placeholder.com/500x750?text=No+Image"
 
-    except Exception:
+    except:
         return "https://via.placeholder.com/500x750?text=Error"
-
 
 # -----------------------------
 # RECOMMEND FUNCTION
@@ -60,55 +105,33 @@ def recommend(movie):
         key=lambda x: x[1]
     )
 
-    recommended_names = []
-    recommended_posters = []
+    names = []
+    posters = []
 
     for i in distances[1:6]:
         movie_id = movies.iloc[i[0]].movie_id
-        recommended_names.append(movies.iloc[i[0]].title)
-        recommended_posters.append(fetch_poster(movie_id))
+        names.append(movies.iloc[i[0]].title)
+        posters.append(fetch_poster(movie_id))
 
-    return recommended_names, recommended_posters
-
-
-# -----------------------------
-# LOAD DATA (CACHED)
-# -----------------------------
-@st.cache_resource
-def load_data():
-    try:
-        movies = pickle.load(open("model/movie_list.pkl", "rb"))
-        similarity = pickle.load(open("model/similarity.pkl", "rb"))
-        return movies, similarity
-    except Exception as e:
-        st.error(f"Error loading model files: {e}")
-        st.stop()
-
-
-movies, similarity = load_data()
-
+    return names, posters
 
 # -----------------------------
 # UI
 # -----------------------------
 st.title("🎬 Movie Recommender System")
 
-movie_list = movies['title'].values
-
 selected_movie = st.selectbox(
     "Type or select a movie from the dropdown",
-    movie_list
+    movies['title'].values
 )
 
 if st.button("Show Recommendation"):
-
     names, posters = recommend(selected_movie)
 
     if not names:
         st.warning("Movie not found in database.")
     else:
         cols = st.columns(5)
-
         for i in range(5):
             with cols[i]:
                 st.text(names[i])
