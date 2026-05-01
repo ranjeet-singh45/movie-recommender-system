@@ -129,8 +129,9 @@ def recommend(movie):
 
     sim_scores = similarity[index]
 
+    # 🔥 FIX: force float conversion safely
     distances = sorted(
-        list(enumerate(sim_scores)),
+        [(i, float(score)) for i, score in enumerate(sim_scores)],
         key=lambda x: x[1],
         reverse=True
     )
