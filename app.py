@@ -3,6 +3,7 @@ import streamlit as st
 import requests
 import os
 import numpy as np
+import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,7 +13,7 @@ load_dotenv()
 # -----------------------------
 st.set_page_config(page_title="Movie Recommender", layout="wide")
 
-# API KEY (cloud + local)
+# API KEY
 try:
     API_KEY = st.secrets["TMDB_API_KEY"]
 except:
@@ -23,7 +24,7 @@ if not API_KEY:
     st.stop()
 
 # -----------------------------
-# GOOGLE DRIVE FILE IDs
+# GOOGLE DRIVE FILE IDs (your swap respected)
 # -----------------------------
 MOVIE_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
 SIM_FILE_ID   = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
@@ -61,7 +62,7 @@ def is_valid_pickle(file_path):
     try:
         with open(file_path, "rb") as f:
             header = f.read(2)
-            return header != b'<!'   # HTML check
+            return header != b'<!'
     except:
         return False
 
@@ -90,8 +91,13 @@ def load_data():
     movies = pickle.load(open(MOVIE_PATH, "rb"))
     similarity = pickle.load(open(SIM_PATH, "rb"))
 
-    # 🔥 CRITICAL FIX (deployment issue)
-    similarity = np.array(similarity, dtype=float)
+    # 🔥 SAFE CONVERSION (critical fix)
+    if isinstance(similarity, pd.DataFrame):
+        similarity = similarity.apply(pd.to_numeric, errors='coerce').fillna(0).values
+    else:
+        similarity = np.array(similarity)
+
+    similarity = similarity.astype(float)
 
     return movies, similarity
 
@@ -131,7 +137,6 @@ def recommend(movie):
         st.error("Similarity indexing failed.")
         return [], []
 
-    # safe sorting
     distances = sorted(
         list(enumerate(sim_scores)),
         key=lambda x: float(x[1]),
