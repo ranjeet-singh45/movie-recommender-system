@@ -3,7 +3,6 @@ import streamlit as st
 import requests
 import os
 import numpy as np
-import pandas as pd
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,7 +23,7 @@ if not API_KEY:
     st.stop()
 
 # -----------------------------
-# GOOGLE DRIVE FILE IDs (your swap respected)
+# GOOGLE DRIVE FILE IDs (correct swap kept)
 # -----------------------------
 MOVIE_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
 SIM_FILE_ID   = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
@@ -61,8 +60,7 @@ def download_file_from_drive(file_id, destination):
 def is_valid_pickle(file_path):
     try:
         with open(file_path, "rb") as f:
-            header = f.read(2)
-            return header != b'<!'
+            return f.read(2) != b'<!'
     except:
         return False
 
@@ -91,13 +89,11 @@ def load_data():
     movies = pickle.load(open(MOVIE_PATH, "rb"))
     similarity = pickle.load(open(SIM_PATH, "rb"))
 
-    # 🔥 SAFE CONVERSION (critical fix)
-    if isinstance(similarity, pd.DataFrame):
-        similarity = similarity.apply(pd.to_numeric, errors='coerce').fillna(0).values
-    else:
-        similarity = np.array(similarity)
+    # ✅ FIX: preserve real values
+    if hasattr(similarity, "values"):
+        similarity = similarity.values
 
-    similarity = similarity.astype(float)
+    similarity = np.array(similarity)
 
     return movies, similarity
 
@@ -131,15 +127,11 @@ def recommend(movie):
 
     index = movies[movies['title'] == movie].index[0]
 
-    try:
-        sim_scores = similarity[index]
-    except Exception:
-        st.error("Similarity indexing failed.")
-        return [], []
+    sim_scores = similarity[index]
 
     distances = sorted(
         list(enumerate(sim_scores)),
-        key=lambda x: float(x[1]),
+        key=lambda x: x[1],
         reverse=True
     )
 
