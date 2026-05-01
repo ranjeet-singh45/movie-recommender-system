@@ -32,7 +32,7 @@ MOVIE_PATH = f"{MODEL_DIR}/movie_list.pkl"
 SIM_PATH = f"{MODEL_DIR}/similarity.pkl"
 
 # -----------------------------
-# DOWNLOAD FUNCTION (ROBUST)
+# DOWNLOAD FUNCTION
 # -----------------------------
 def download_file_from_drive(file_id, destination):
     URL = "https://drive.google.com/uc?export=download"
@@ -40,7 +40,6 @@ def download_file_from_drive(file_id, destination):
 
     response = session.get(URL, params={'id': file_id}, stream=True)
 
-    # Handle Google Drive confirmation for large files
     for key, value in response.cookies.items():
         if key.startswith('download_warning'):
             response = session.get(
@@ -55,44 +54,44 @@ def download_file_from_drive(file_id, destination):
                 f.write(chunk)
 
 # -----------------------------
-# VALIDATE FILE (IMPORTANT)
+# VALIDATE FILE
 # -----------------------------
 def is_valid_pickle(file_path):
     try:
         with open(file_path, "rb") as f:
             header = f.read(2)
-            return header != b'<!'  # HTML check
+            return header != b'<!'
     except:
         return False
 
 # -----------------------------
-# LOAD DATA (AUTO DOWNLOAD + FIX)
+# LOAD DATA
 # -----------------------------
 @st.cache_resource
 def load_data():
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    # MOVIE FILE
+    # Download movie list
     if not os.path.exists(MOVIE_PATH) or not is_valid_pickle(MOVIE_PATH):
-        st.warning("Downloading / fixing movie list...")
         if os.path.exists(MOVIE_PATH):
             os.remove(MOVIE_PATH)
+        st.info("Downloading movie list...")
         download_file_from_drive(MOVIE_FILE_ID, MOVIE_PATH)
 
-    # SIMILARITY FILE
+    # Download similarity
     if not os.path.exists(SIM_PATH) or not is_valid_pickle(SIM_PATH):
-        st.warning("Downloading / fixing similarity matrix (first run only)...")
         if os.path.exists(SIM_PATH):
             os.remove(SIM_PATH)
+        st.info("Downloading similarity matrix (first run)...")
         download_file_from_drive(SIM_FILE_ID, SIM_PATH)
 
-    # LOAD
-    try:
-        movies = pickle.load(open(MOVIE_PATH, "rb"))
-        similarity = pickle.load(open(SIM_PATH, "rb"))
-    except Exception as e:
-        st.error("Model files are corrupted. Please redeploy.")
-        st.stop()
+    # Load
+    movies = pickle.load(open(MOVIE_PATH, "rb"))
+    similarity = pickle.load(open(SIM_PATH, "rb"))
+
+    # 🔥 FIX: Ensure similarity is numpy array
+    if hasattr(similarity, "iloc"):
+        similarity = similarity.values
 
     return movies, similarity
 
@@ -112,8 +111,7 @@ def fetch_poster(movie_id):
 
         if poster_path:
             return f"https://image.tmdb.org/t/p/w500/{poster_path}"
-        else:
-            return "https://via.placeholder.com/500x750?text=No+Image"
+        return "https://via.placeholder.com/500x750?text=No+Image"
 
     except:
         return "https://via.placeholder.com/500x750?text=Error"
@@ -128,13 +126,12 @@ def recommend(movie):
     index = movies[movies['title'] == movie].index[0]
 
     distances = sorted(
-        list(enumerate(similarity[index])),
+        list(enumerate(similarity[index])),  # now safe
         reverse=True,
         key=lambda x: x[1]
     )
 
-    names = []
-    posters = []
+    names, posters = [], []
 
     for i in distances[1:6]:
         movie_id = movies.iloc[i[0]].movie_id
