@@ -23,8 +23,8 @@ if not API_KEY:
 # -----------------------------
 # GOOGLE DRIVE FILE IDs
 # -----------------------------
-MOVIE_FILE_ID = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
-SIM_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
+MOVIE_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
+SIM_FILE_ID = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
 
 MODEL_DIR = "model"
 MOVIE_PATH = f"{MODEL_DIR}/movie_list.pkl"
@@ -34,15 +34,22 @@ SIM_PATH = f"{MODEL_DIR}/similarity.pkl"
 # DOWNLOAD FUNCTION
 # -----------------------------
 def download_file_from_drive(file_id, destination):
-    url = f"https://drive.google.com/uc?id={file_id}"
-    response = requests.get(url)
+    import requests
 
-    if response.status_code != 200:
-        st.error("Failed to download model files.")
-        st.stop()
+    URL = "https://drive.google.com/uc?export=download"
+    session = requests.Session()
+
+    response = session.get(URL, params={'id': file_id}, stream=True)
+
+    # Handle large file confirmation
+    for key, value in response.cookies.items():
+        if key.startswith('download_warning'):
+            response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
 
     with open(destination, "wb") as f:
-        f.write(response.content)
+        for chunk in response.iter_content(1024 * 1024):
+            if chunk:
+                f.write(chunk)
 
 # -----------------------------
 # LOAD DATA (WITH AUTO DOWNLOAD)
