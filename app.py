@@ -2,6 +2,7 @@ import pickle
 import streamlit as st
 import requests
 import os
+import numpy as np
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -60,7 +61,7 @@ def is_valid_pickle(file_path):
     try:
         with open(file_path, "rb") as f:
             header = f.read(2)
-            return header != b'<!'
+            return header != b'<!'   # HTML check
     except:
         return False
 
@@ -71,27 +72,26 @@ def is_valid_pickle(file_path):
 def load_data():
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    # Download movie list
+    # movie file
     if not os.path.exists(MOVIE_PATH) or not is_valid_pickle(MOVIE_PATH):
         if os.path.exists(MOVIE_PATH):
             os.remove(MOVIE_PATH)
         st.info("Downloading movie list...")
         download_file_from_drive(MOVIE_FILE_ID, MOVIE_PATH)
 
-    # Download similarity
+    # similarity file
     if not os.path.exists(SIM_PATH) or not is_valid_pickle(SIM_PATH):
         if os.path.exists(SIM_PATH):
             os.remove(SIM_PATH)
         st.info("Downloading similarity matrix (first run)...")
         download_file_from_drive(SIM_FILE_ID, SIM_PATH)
 
-    # Load
+    # load
     movies = pickle.load(open(MOVIE_PATH, "rb"))
     similarity = pickle.load(open(SIM_PATH, "rb"))
 
-    # 🔥 FIX: Ensure similarity is numpy array
-    if hasattr(similarity, "iloc"):
-        similarity = similarity.values
+    # 🔥 CRITICAL FIX (deployment issue)
+    similarity = np.array(similarity, dtype=float)
 
     return movies, similarity
 
@@ -125,10 +125,17 @@ def recommend(movie):
 
     index = movies[movies['title'] == movie].index[0]
 
+    try:
+        sim_scores = similarity[index]
+    except Exception:
+        st.error("Similarity indexing failed.")
+        return [], []
+
+    # safe sorting
     distances = sorted(
-        list(enumerate(similarity[index])),  # now safe
-        reverse=True,
-        key=lambda x: x[1]
+        list(enumerate(sim_scores)),
+        key=lambda x: float(x[1]),
+        reverse=True
     )
 
     names, posters = [], []
