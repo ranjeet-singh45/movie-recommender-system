@@ -24,8 +24,8 @@ if not API_KEY:
 # -----------------------------
 # GOOGLE DRIVE FILE IDs
 # -----------------------------
-MOVIE_FILE_ID = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
-SIM_FILE_ID   = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
+MOVIE_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
+SIM_FILE_ID   = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
 
 MODEL_DIR = "model"
 MOVIE_PATH = f"{MODEL_DIR}/movie_list.pkl"
