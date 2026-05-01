@@ -3,6 +3,7 @@ import streamlit as st
 import requests
 import os
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # -----------------------------
@@ -10,41 +11,43 @@ load_dotenv()
 # -----------------------------
 st.set_page_config(page_title="Movie Recommender", layout="wide")
 
-# Use Streamlit secrets (for deployment)
+# API KEY (cloud + local)
 try:
     API_KEY = st.secrets["TMDB_API_KEY"]
 except:
     API_KEY = os.getenv("TMDB_API_KEY")
 
 if not API_KEY:
-    st.error("TMDB API key not found. Set it in Streamlit secrets or .env")
+    st.error("TMDB API key not found.")
     st.stop()
 
 # -----------------------------
 # GOOGLE DRIVE FILE IDs
 # -----------------------------
-MOVIE_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
-SIM_FILE_ID = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
+MOVIE_FILE_ID = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
+SIM_FILE_ID   = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
 
 MODEL_DIR = "model"
 MOVIE_PATH = f"{MODEL_DIR}/movie_list.pkl"
 SIM_PATH = f"{MODEL_DIR}/similarity.pkl"
 
 # -----------------------------
-# DOWNLOAD FUNCTION
+# DOWNLOAD FUNCTION (ROBUST)
 # -----------------------------
 def download_file_from_drive(file_id, destination):
-    import requests
-
     URL = "https://drive.google.com/uc?export=download"
     session = requests.Session()
 
     response = session.get(URL, params={'id': file_id}, stream=True)
 
-    # Handle large file confirmation
+    # Handle Google Drive confirmation for large files
     for key, value in response.cookies.items():
         if key.startswith('download_warning'):
-            response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
+            response = session.get(
+                URL,
+                params={'id': file_id, 'confirm': value},
+                stream=True
+            )
 
     with open(destination, "wb") as f:
         for chunk in response.iter_content(1024 * 1024):
@@ -52,22 +55,44 @@ def download_file_from_drive(file_id, destination):
                 f.write(chunk)
 
 # -----------------------------
-# LOAD DATA (WITH AUTO DOWNLOAD)
+# VALIDATE FILE (IMPORTANT)
+# -----------------------------
+def is_valid_pickle(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            header = f.read(2)
+            return header != b'<!'  # HTML check
+    except:
+        return False
+
+# -----------------------------
+# LOAD DATA (AUTO DOWNLOAD + FIX)
 # -----------------------------
 @st.cache_resource
 def load_data():
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    if not os.path.exists(MOVIE_PATH):
-        st.info("Downloading movie list...")
+    # MOVIE FILE
+    if not os.path.exists(MOVIE_PATH) or not is_valid_pickle(MOVIE_PATH):
+        st.warning("Downloading / fixing movie list...")
+        if os.path.exists(MOVIE_PATH):
+            os.remove(MOVIE_PATH)
         download_file_from_drive(MOVIE_FILE_ID, MOVIE_PATH)
 
-    if not os.path.exists(SIM_PATH):
-        st.info("Downloading similarity matrix (first run only)...")
+    # SIMILARITY FILE
+    if not os.path.exists(SIM_PATH) or not is_valid_pickle(SIM_PATH):
+        st.warning("Downloading / fixing similarity matrix (first run only)...")
+        if os.path.exists(SIM_PATH):
+            os.remove(SIM_PATH)
         download_file_from_drive(SIM_FILE_ID, SIM_PATH)
 
-    movies = pickle.load(open(MOVIE_PATH, "rb"))
-    similarity = pickle.load(open(SIM_PATH, "rb"))
+    # LOAD
+    try:
+        movies = pickle.load(open(MOVIE_PATH, "rb"))
+        similarity = pickle.load(open(SIM_PATH, "rb"))
+    except Exception as e:
+        st.error("Model files are corrupted. Please redeploy.")
+        st.stop()
 
     return movies, similarity
 
@@ -81,12 +106,8 @@ movies, similarity = load_data()
 def fetch_poster(movie_id):
     try:
         url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key={API_KEY}&language=en-US"
-        response = requests.get(url, timeout=5)
+        data = requests.get(url, timeout=5).json()
 
-        if response.status_code != 200:
-            return "https://via.placeholder.com/500x750?text=API+Error"
-
-        data = response.json()
         poster_path = data.get("poster_path")
 
         if poster_path:
@@ -128,7 +149,7 @@ def recommend(movie):
 st.title("🎬 Movie Recommender System")
 
 selected_movie = st.selectbox(
-    "Type or select a movie from the dropdown",
+    "Select a movie",
     movies['title'].values
 )
 
@@ -136,10 +157,11 @@ if st.button("Show Recommendation"):
     names, posters = recommend(selected_movie)
 
     if not names:
-        st.warning("Movie not found in database.")
+        st.warning("Movie not found.")
     else:
         cols = st.columns(5)
-        for i in range(5):
+
+        for i in range(len(names)):
             with cols[i]:
                 st.text(names[i])
                 st.image(posters[i])
