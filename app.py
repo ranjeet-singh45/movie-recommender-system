@@ -1,8 +1,8 @@
 import pickle
 import streamlit as st
 import requests
-import os
 import numpy as np
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,81 +23,22 @@ if not API_KEY:
     st.stop()
 
 # -----------------------------
-# GOOGLE DRIVE FILE IDs
-# -----------------------------
-MOVIE_FILE_ID = "1ktKgENvp2l-9fEnLacmAqiFykoT-hHbW"
-SIM_FILE_ID   = "1Rs2qoS_JdTH4b9d11SmGsIhYZrPE0vR6"
-
-MODEL_DIR = "model"
-MOVIE_PATH = f"{MODEL_DIR}/movie_list.pkl"
-SIM_PATH = f"{MODEL_DIR}/similarity.pkl"
-
-# -----------------------------
-# DOWNLOAD FUNCTION
-# -----------------------------
-def download_file_from_drive(file_id, destination):
-    URL = "https://drive.google.com/uc?export=download"
-    session = requests.Session()
-
-    response = session.get(URL, params={'id': file_id}, stream=True, timeout=30)
-
-    for key, value in response.cookies.items():
-        if key.startswith('download_warning'):
-            response = session.get(
-                URL,
-                params={'id': file_id, 'confirm': value},
-                stream=True,
-                timeout=30
-            )
-
-    with open(destination, "wb") as f:
-        for chunk in response.iter_content(1024 * 1024):
-            if chunk:
-                f.write(chunk)
-
-# -----------------------------
-# VALIDATE FILE
-# -----------------------------
-def is_valid_pickle(file_path):
-    try:
-        with open(file_path, "rb") as f:
-            pickle.load(f)
-        return True
-    except:
-        return False
-
-# -----------------------------
 # LOAD DATA
 # -----------------------------
 @st.cache_resource
 def load_data():
-    os.makedirs(MODEL_DIR, exist_ok=True)
+    try:
+        movies = pickle.load(open("model/movie_list.pkl", "rb"))
+        similarity = pickle.load(open("model/similarity.pkl", "rb"))
 
-    # movie file
-    if not os.path.exists(MOVIE_PATH) or not is_valid_pickle(MOVIE_PATH):
-        if os.path.exists(MOVIE_PATH):
-            os.remove(MOVIE_PATH)
-        st.info("Downloading movie list...")
-        download_file_from_drive(MOVIE_FILE_ID, MOVIE_PATH)
+        # ensure numpy array
+        similarity = np.array(similarity)
 
-    # similarity file
-    if not os.path.exists(SIM_PATH) or not is_valid_pickle(SIM_PATH):
-        if os.path.exists(SIM_PATH):
-            os.remove(SIM_PATH)
-        st.info("Downloading similarity matrix (first run)...")
-        download_file_from_drive(SIM_FILE_ID, SIM_PATH)
+        return movies, similarity
 
-    # load
-    movies = pickle.load(open(MOVIE_PATH, "rb"))
-    similarity = pickle.load(open(SIM_PATH, "rb"))
-
-    # ensure proper format
-    if hasattr(similarity, "values"):
-        similarity = similarity.values
-
-    similarity = np.array(similarity)
-
-    return movies, similarity
+    except Exception as e:
+        st.error(f"Error loading model files: {e}")
+        st.stop()
 
 
 movies, similarity = load_data()
@@ -121,7 +62,7 @@ def fetch_poster(movie_id):
         return "https://via.placeholder.com/500x750?text=Error"
 
 # -----------------------------
-# RECOMMEND FUNCTION (FINAL FIX)
+# RECOMMEND FUNCTION
 # -----------------------------
 def recommend(movie):
     if movie not in movies['title'].values:
@@ -129,21 +70,19 @@ def recommend(movie):
 
     index = movies[movies['title'] == movie].index[0]
 
-    # FIX HERE
-    sim_scores = np.array(similarity[index]).flatten()
-    st.write("Sample scores:", sim_scores[:10])
+    sim_scores = similarity[index]
 
-    distances = sorted(
-        list(enumerate(sim_scores)),
-        key=lambda x: x[1],
-        reverse=True
-    )
+    # ensure clean array
+    sim_scores = np.array(sim_scores).flatten()
+
+    # numpy sorting (stable)
+    top_indices = np.argsort(sim_scores)[::-1][1:6]
 
     names, posters = [], []
 
-    for i in distances[1:6]:
-        movie_id = movies.iloc[i[0]].movie_id
-        names.append(movies.iloc[i[0]].title)
+    for i in top_indices:
+        movie_id = movies.iloc[i].movie_id
+        names.append(movies.iloc[i].title)
         posters.append(fetch_poster(movie_id))
 
     return names, posters
