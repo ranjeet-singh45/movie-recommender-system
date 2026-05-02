@@ -129,11 +129,21 @@ def recommend(movie):
 
     index = movies[movies['title'] == movie].index[0]
 
-    # ✅ Convert entire row safely (DON’T convert per element)
-    sim_scores = np.array(similarity[index], dtype=np.float32)
+    sim_scores = similarity[index]
+
+    # ✅ SAFE conversion (no dtype forcing)
+    sim_scores = np.array(sim_scores)
+
+    # convert only valid numbers
+    cleaned_scores = []
+    for score in sim_scores:
+        try:
+            cleaned_scores.append(float(score))
+        except:
+            cleaned_scores.append(0.0)
 
     distances = sorted(
-        list(enumerate(sim_scores)),
+        list(enumerate(cleaned_scores)),
         key=lambda x: x[1],
         reverse=True
     )
