@@ -23,7 +23,7 @@ if not API_KEY:
     st.stop()
 
 # -----------------------------
-# GOOGLE DRIVE FILE IDs (correct swap kept)
+# GOOGLE DRIVE FILE IDs
 # -----------------------------
 MOVIE_FILE_ID = "1ktKgENvp2l-9fEnLacmAqiFykoT-hHbW"
 SIM_FILE_ID   = "1Rs2qoS_JdTH4b9d11SmGsIhYZrPE0vR6"
@@ -39,14 +39,15 @@ def download_file_from_drive(file_id, destination):
     URL = "https://drive.google.com/uc?export=download"
     session = requests.Session()
 
-    response = session.get(URL, params={'id': file_id}, stream=True)
+    response = session.get(URL, params={'id': file_id}, stream=True, timeout=30)
 
     for key, value in response.cookies.items():
         if key.startswith('download_warning'):
             response = session.get(
                 URL,
                 params={'id': file_id, 'confirm': value},
-                stream=True
+                stream=True,
+                timeout=30
             )
 
     with open(destination, "wb") as f:
@@ -60,7 +61,7 @@ def download_file_from_drive(file_id, destination):
 def is_valid_pickle(file_path):
     try:
         with open(file_path, "rb") as f:
-            obj = pickle.load(f)   # try loading
+            pickle.load(f)
         return True
     except:
         return False
@@ -90,7 +91,7 @@ def load_data():
     movies = pickle.load(open(MOVIE_PATH, "rb"))
     similarity = pickle.load(open(SIM_PATH, "rb"))
 
-    # ✅ FIX: preserve real values
+    # ensure proper format
     if hasattr(similarity, "values"):
         similarity = similarity.values
 
@@ -120,7 +121,7 @@ def fetch_poster(movie_id):
         return "https://via.placeholder.com/500x750?text=Error"
 
 # -----------------------------
-# RECOMMEND FUNCTION
+# RECOMMEND FUNCTION (FINAL FIX)
 # -----------------------------
 def recommend(movie):
     if movie not in movies['title'].values:
@@ -130,9 +131,12 @@ def recommend(movie):
 
     sim_scores = similarity[index]
 
-    # 🔥 FIX: force float conversion safely
+    # 🔥 SAFE conversion (handles any bad values)
     distances = sorted(
-        [(i, float(score)) for i, score in enumerate(sim_scores)],
+        [
+            (i, float(score) if isinstance(score, (int, float, np.floating)) else 0.0)
+            for i, score in enumerate(sim_scores)
+        ],
         key=lambda x: x[1],
         reverse=True
     )
