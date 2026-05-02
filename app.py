@@ -25,8 +25,8 @@ if not API_KEY:
 # -----------------------------
 # GOOGLE DRIVE FILE IDs (correct swap kept)
 # -----------------------------
-MOVIE_FILE_ID = "1jHsO9L9jfPH4XNrQeYagzwyzNcIHLv7F"
-SIM_FILE_ID   = "18bxKN-IaMxpzx_jNkMRtYXCMTaFWH6Up"
+MOVIE_FILE_ID = "1ktKgENvp2l-9fEnLacmAqiFykoT-hHbW"
+SIM_FILE_ID   = "1Rs2qoS_JdTH4b9d11SmGsIhYZrPE0vR6"
 
 MODEL_DIR = "model"
 MOVIE_PATH = f"{MODEL_DIR}/movie_list.pkl"
@@ -60,7 +60,8 @@ def download_file_from_drive(file_id, destination):
 def is_valid_pickle(file_path):
     try:
         with open(file_path, "rb") as f:
-            return f.read(2) != b'<!'
+            obj = pickle.load(f)   # try loading
+        return True
     except:
         return False
 
